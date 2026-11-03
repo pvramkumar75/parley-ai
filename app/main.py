@@ -55,6 +55,7 @@ class Brief(BaseModel):
     quantity: float = Field(1, gt=0)
     unit: str = "kg"
     needed_by: str = ""
+    company: str = Field("", max_length=120)
     supplier_name: str = Field(min_length=1, max_length=120)
     contact: str = ""
     phone: str = ""
@@ -126,6 +127,27 @@ def extract_price(text: str, brief: dict, last: Optional[float]) -> Optional[flo
     return best
 
 
+def opening_message(b: dict) -> str:
+    """Introduction sent as soon as the supplier opens the link.
+
+    States the bot's opening offer (below the real target), never the target or ceiling.
+    """
+    who = b["contact"].strip() or b["supplier_name"]
+    me = b["company"].strip() or "the buyer"
+    c = b["currency"]
+    intro = (f"Hello {who}, I am an AI assistant negotiating on behalf of {me}. I am trained to negotiate "
+             "with you logically, considering market trends and cost modelling. ")
+    if b["quoted"]:
+        offer = engine.opening_anchor(b["quoted"], b["target"])
+        body = (f"Thank you for your quote of {c} {b['quoted']:g}. However, we find it on the higher side. "
+                f"Our proposed price is {c} {offer:g} per unit")
+    else:
+        body = "Please share your best rate per unit so we can move ahead"
+    if b["terms"]:
+        body += ", and the terms we are looking for are: " + ", ".join(b["terms"])
+    return intro + body + ". Can we work towards this?"
+
+
 # ---------- API ----------
 @app.get("/api/health")
 def health():
@@ -139,6 +161,9 @@ def create(b: Brief):
          "status": "open", "created_at": time.time(), "expires_at": time.time() + b.hours * 3600,
          "last_bot": None, "last_sup": b.quoted or None, "outcome": None}
     add_msg(n, "system", f"Negotiation with {b.supplier_name} opened for {b.item}.")
+    add_msg(n, "bot", opening_message(n["brief"]), engine.opening_anchor(b.quoted, b.target) if b.quoted else None)
+    if b.quoted:
+        n["last_bot"] = engine.opening_anchor(b.quoted, b.target)
     save(n)
     return {"id": nid, "buyer_token": token, "link": f"/n/{nid}"}
 

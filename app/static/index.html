@@ -27,7 +27,8 @@
     </div>
     <h2 style="margin-top:20px">2 · The supplier</h2>
     <div class="grid">
-      <div><label>Firm name *</label><input id="supplier_name" required></div>
+      <div><label>Your company (named in the bot's intro)</label><input id="company" placeholder="Thermo Group"></div>
+      <div><label>Supplier firm name *</label><input id="supplier_name" required></div>
       <div><label>Contact person</label><input id="contact"></div>
       <div><label>WhatsApp / phone</label><input id="phone" placeholder="+91…"></div>
       <div><label>Email</label><input id="email" type="email"></div>
@@ -165,7 +166,7 @@ $('#form').onsubmit = async e => {
   const g = i => $('#' + i).value;
   const b = {
     item: g('item'), category: g('category'), quantity: +g('quantity') || 1, unit: g('unit'), needed_by: g('needed_by'),
-    supplier_name: g('supplier_name'), contact: g('contact'), phone: g('phone'), email: g('email'),
+    company: g('company'), supplier_name: g('supplier_name'), contact: g('contact'), phone: g('phone'), email: g('email'),
     currency: g('currency'), quoted: +g('quoted') || 0, target: +g('target'), ceiling: +g('ceiling'),
     terms: [...sel.terms], tone: g('tone'), tactics: [...sel.tactics], instructions: g('instructions'), market_notes: g('market_notes'),
     engine: g('engine'), strategy: g('strategy'), pacing: g('pacing'), hours: +g('hours') || 48, max_rounds: +g('max_rounds') || 10,
