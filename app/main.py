@@ -116,6 +116,13 @@ def add_msg(n: dict, role: str, text: str, price=None, delay: float = 0.0) -> di
 
 def extract_price(text: str, brief: dict, last: Optional[float]) -> Optional[float]:
     ref = last or brief["quoted"] or brief["target"]
+    # "only 1% discount" / "5 percent off": a cut from their last rate, not a price
+    pct = re.search(r"(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)", text, re.I)
+    lone = len(re.findall(r"\d[\d,]*\.?\d*", text)) == 1    # "sorry 1% only"
+    if pct and last and (lone or re.search(r"discount|off|less|reduc|lower|cut|down", text, re.I)):
+        p = float(pct.group(1))
+        if 0 < p < 60:
+            return round(last * (1 - p / 100), 2)
     best = None
     for raw in re.findall(r"\d[\d,]*\.?\d*", text):
         try:
@@ -232,7 +239,8 @@ def message(nid: str, r: MsgReq):
     text = r.text.strip()
     if not text and r.price is None:
         raise HTTPException(422, "Write a message or quote a rate")
-    price = r.price or extract_price(text, brief, n["last_sup"])
+    prev_sup = n["last_sup"]
+    price = r.price or extract_price(text, brief, prev_sup)
     text = text or f"My rate is {brief['currency']} {price:g}."
     add_msg(n, "sup", text, price)
     if price is not None:
@@ -240,7 +248,8 @@ def message(nid: str, r: MsgReq):
     d = engine.decide(brief, price, n["round"], n["last_bot"])
     history = [m for m in n["messages"] if m["role"] in ("bot", "sup", "buyer")]
     whispers = [m["text"] for m in n["messages"] if m["role"] == "whisper"]
-    reply, source = ai.write_reply(brief, d, price, history, whispers)
+    reply, source = ai.write_reply(brief, d, price, history, whispers,
+                                   {"round": n["round"], "prev_sup": prev_sup, "last_bot": n["last_bot"]})
     delay = random.uniform(3, 10) if brief["pacing"] == "natural" else 0.0
     add_msg(n, "bot", reply, d["price"], delay)
     if price is not None:
