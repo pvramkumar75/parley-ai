@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: parley-ai
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      # Add these in the Render dashboard (Environment). They are never committed.
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: AI_PROVIDER      # "sarvam" or "deepseek"; blank = whichever key is set
+        sync: false
+      - key: SARVAM_MODEL
+        value: sarvam-m

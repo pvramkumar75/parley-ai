@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Parley — supplier room</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header><div class="logo">Par<b>ley</b></div><div class="tag">Supplier room</div></header>
+<main style="max-width:760px">
+  <div class="card"><div class="row"><h2 id="title" style="margin:0">Loading…</h2><span id="status" class="pill"></span></div>
+    <p class="hint" id="meta"></p></div>
+  <div class="card"><div class="chat" id="chat"></div><div class="typing" id="typing"></div>
+    <div id="composer">
+      <div class="row" style="margin-top:10px">
+        <input id="msg" placeholder="Write your reply…" style="flex:1;min-width:200px">
+        <input id="price" type="number" step="any" placeholder="Rate (optional)" style="width:140px">
+        <button class="btn primary" id="send">Send</button>
+      </div>
+      <div class="row" style="margin-top:10px"><button class="btn" id="accept">Accept current offer</button>
+        <button class="btn" id="time">Ask for time</button></div>
+    </div>
+    <p class="hint hidden" id="closed"></p>
+  </div>
+</main>
+<script src="/static/common.js"></script>
+<script>
+const id = location.pathname.split('/').pop();
+let state;
+async function refresh() {
+  try { state = await api('/api/negotiations/' + encodeURIComponent(id)); } catch (e) { $('#title').textContent = e.message; $('#composer').classList.add('hidden'); return; }
+  const b = state.brief;
+  $('#title').textContent = `${b.item} — ${b.quantity} ${b.unit}`;
+  $('#status').textContent = state.status; $('#status').className = 'pill ' + state.status;
+  $('#meta').textContent = `Buyer negotiating with ${b.supplier_name}${b.needed_by ? ' · needed by ' + b.needed_by : ''}${b.terms.length ? ' · terms: ' + b.terms.join(', ') : ''} · currency ${b.currency}`;
+  renderChat($('#chat'), state.messages, 'supplier');
+  $('#typing').textContent = state.pending ? 'Buyer is typing…' : '';
+  const open = state.status === 'open';
+  $('#composer').classList.toggle('hidden', !open); $('#closed').classList.toggle('hidden', open);
+  if (!open) $('#closed').textContent = state.status === 'concluded' ? (state.outcome?.agreed_price ? `Agreed at ${fmt(b.currency, state.outcome.agreed_price)}. Thank you.` : 'This negotiation has concluded.') : 'This link has expired. Ask the buyer to extend it.';
+}
+async function send(body) {
+  try { await api(`/api/negotiations/${encodeURIComponent(id)}/message`, body); $('#msg').value = ''; $('#price').value = ''; refresh(); } catch (e) { toast(e.message); }
+}
+$('#send').onclick = () => send({ kind: 'sup', text: $('#msg').value, price: +$('#price').value || null });
+$('#msg').onkeydown = e => { if (e.key === 'Enter') $('#send').click(); };
+$('#accept').onclick = () => confirm('Accept the buyer’s current offer?') && send({ kind: 'sup_accept' });
+$('#time').onclick = () => send({ kind: 'sup', text: 'Please give me some time to check and revert.' });
+refresh(); setInterval(refresh, 3000);
+</script>
+</body>
+</html>

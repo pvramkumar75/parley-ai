@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Parley — AI negotiation desk</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="logo">Par<b>ley</b></div><div class="tag">AI + game-theory negotiation desk</div>
+  <nav><button data-v="new" class="on">New deal</button><button data-v="deals">My deals</button></nav>
+</header>
+<main>
+
+<section id="v-new">
+  <form id="form" class="card">
+    <h2>1 · The item</h2>
+    <div class="grid">
+      <div class="span2"><label>Item / material *</label><input id="item" required placeholder="Copper wire rod 8 mm"></div>
+      <div><label>Category</label><select id="category"><option>metals</option><option>textiles</option><option>polymers</option><option>packaging</option><option>electronics</option><option>machinery spares</option><option>food/agri</option><option>services</option><option selected>other</option></select></div>
+      <div><label>Quantity</label><input id="quantity" type="number" min="0" step="any" value="1000"></div>
+      <div><label>Unit</label><input id="unit" value="kg"></div>
+      <div><label>Required by</label><input id="needed_by" type="date"></div>
+    </div>
+    <h2 style="margin-top:20px">2 · The supplier</h2>
+    <div class="grid">
+      <div><label>Firm name *</label><input id="supplier_name" required></div>
+      <div><label>Contact person</label><input id="contact"></div>
+      <div><label>WhatsApp / phone</label><input id="phone" placeholder="+91…"></div>
+      <div><label>Email</label><input id="email" type="email"></div>
+    </div>
+    <h2 style="margin-top:20px">3 · Deal numbers <span class="tag">(target and ceiling never reach the supplier)</span></h2>
+    <div class="grid">
+      <div><label>Currency</label><select id="currency"><option>INR</option><option>USD</option><option>CNY</option><option>EUR</option></select></div>
+      <div><label>Supplier's quoted rate</label><input id="quoted" type="number" min="0" step="any"></div>
+      <div><label>Your target rate *</label><input id="target" type="number" min="0" step="any" required></div>
+      <div><label>Walk-away ceiling *</label><input id="ceiling" type="number" min="0" step="any" required></div>
+    </div>
+    <div class="hint" id="anchorHint"></div>
+    <h3 style="margin-top:16px">Terms to win</h3>
+    <div class="chips" id="terms"></div>
+    <h2 style="margin-top:20px">4 · Behaviour</h2>
+    <div class="grid">
+      <div><label>Tone</label><select id="tone"><option value="warm">Warm</option><option value="firm" selected>Firm</option><option value="aggressive">Aggressive</option></select></div>
+      <div><label>Concession strategy (NegMAS)</label><select id="strategy"><option value="boulware">Boulware — hold firm, concede late</option><option value="linear">Linear — steady</option><option value="conceder">Conceder — concede early</option></select></div>
+      <div><label>Wording engine</label><select id="engine"><option value="ai">AI (Sarvam / DeepSeek)</option><option value="rules">Rules only — no AI call</option></select></div>
+      <div><label>Reply pacing</label><select id="pacing"><option value="natural">Natural (3–10 s)</option><option value="instant">Instant</option></select></div>
+      <div><label>Link valid (hours)</label><input id="hours" type="number" min="1" max="720" value="48"></div>
+      <div><label>Max rounds</label><input id="max_rounds" type="number" min="2" max="40" value="10"></div>
+    </div>
+    <h3 style="margin-top:16px">Tactics</h3>
+    <div class="chips" id="tactics"></div>
+    <div class="grid" style="margin-top:12px">
+      <div class="span2"><label>Instructions to the bot</label><textarea id="instructions" placeholder="e.g. Mention we are a long-term buyer. Don't discuss other vendors."></textarea></div>
+      <div class="span2"><label>Market data (the only price source the AI may cite)</label><textarea id="market_notes" placeholder="LME copper 8,420 USD/t; USD/INR 83.2; last PO 342 INR/kg…"></textarea></div>
+    </div>
+
+    <div class="card" style="margin:18px 0 0;background:var(--bg)">
+      <h3>NegMAS forecast</h3>
+      <div class="row">
+        <input id="floor" type="number" step="any" placeholder="Supplier cost floor (estimate)" style="max-width:240px">
+        <button type="button" class="btn" id="fcBtn">Run forecast</button>
+      </div>
+      <div id="fcOut" class="hint">Fill quote, target and ceiling, then run. Simulates your strategy against a modelled supplier.</div>
+      <canvas id="fcChart" height="120" class="hidden"></canvas>
+    </div>
+    <div class="row" style="margin-top:16px"><button class="btn primary" id="createBtn">Create negotiation link</button></div>
+  </form>
+  <div id="created" class="card hidden"></div>
+</section>
+
+<section id="v-deals" class="hidden">
+  <div class="row" style="margin-bottom:12px"><h2 style="margin:0">My deals</h2>
+    <span style="margin-left:auto" class="row"><button class="btn" id="exportBtn">Back up</button>
+    <label class="btn" style="margin:0">Restore<input id="importFile" type="file" accept=".json" hidden></label></span></div>
+  <div id="dealList"></div>
+</section>
+
+<section id="v-desk" class="hidden">
+  <button class="btn" id="backBtn" style="margin-bottom:12px">← All deals</button>
+  <div class="card"><div class="row"><h2 id="dTitle" style="margin:0"></h2><span id="dStatus" class="pill"></span>
+    <span class="tag" id="dMeta" style="margin-left:auto"></span></div>
+    <div class="kpis" id="dKpis" style="margin-top:12px"></div>
+    <div class="linkbox"><input id="dLink" readonly><button class="btn" id="copyBtn">Copy link</button><button class="btn" id="waBtn">WhatsApp</button></div>
+  </div>
+  <div class="card"><h2>Live conversation</h2><div class="chat" id="dChat"></div>
+    <div class="row" style="margin-top:12px">
+      <input id="dInput" placeholder="Type…" style="flex:1;min-width:200px">
+      <select id="dMode" style="width:auto"><option value="buyer_whisper">Whisper to bot (hidden)</option><option value="buyer_manual">Send as Buyer</option></select>
+      <button class="btn primary" id="dSend">Send</button>
+    </div></div>
+  <div class="card"><h2>Conclude negotiation</h2>
+    <div class="grid">
+      <div><label>Agreed rate</label><input id="c_price" type="number" step="any"></div>
+      <div><label>Price validity</label><input id="c_validity" placeholder="30 days"></div>
+      <div><label>Delivery</label><input id="c_delivery"></div>
+      <div><label>Payment terms</label><input id="c_payment"></div>
+      <div><label>Packing</label><input id="c_packing"></div>
+      <div><label>Freight</label><input id="c_freight"></div>
+      <div class="span2"><label>Quality / liability</label><input id="c_quality"></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn primary" id="concludeBtn">Record conclusion</button>
+      <button class="btn" id="extendBtn">Extend 24 h</button><button class="btn" id="pdfBtn">Export PDF report</button></div>
+  </div>
+</section>
+</main>
+<script src="/static/common.js"></script>
+<script>
+const TERMS = ['Price validity', 'Payment terms', 'Free delivery', 'Packing', 'Quality certificate', 'Warranty', 'Volume discount', 'Faster delivery'];
+const TACTICS = ['Ask cost breakup', 'Cite last PO', 'Competing quote', 'Volume carrot', 'Hold firm', 'Face-saving exit', 'Split the difference', 'Anti re-trade'];
+const sel = { terms: new Set(), tactics: new Set() };
+function chips(id, list, set) {
+  $(id).innerHTML = list.map(t => `<span class="chip">${esc(t)}</span>`).join('');
+  $(id).onclick = e => { const c = e.target.closest('.chip'); if (!c) return; c.classList.toggle('on'); c.classList.contains('on') ? set.add(c.textContent) : set.delete(c.textContent); };
+}
+chips('#terms', TERMS, sel.terms); chips('#tactics', TACTICS, sel.tactics);
+
+/* local list of my deals (id + buyer token live only in this browser) */
+const KEY = 'parley.deals';
+const loadMy = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+const saveMy = l => { try { localStorage.setItem(KEY, JSON.stringify(l)); } catch { } };
+
+function show(v) {
+  for (const s of ['new', 'deals', 'desk']) $('#v-' + s).classList.toggle('hidden', s !== v);
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  clearInterval(poll); if (v === 'deals') renderDeals();
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => show(b.dataset.v));
+
+/* opening anchor preview — mirrors engine.opening_anchor */
+function anchor(Q, T) {
+  const gap = Q > T ? Q - T : 0; let a = gap > 0 ? T - gap * .2 : T * .94;
+  a = Math.min(Math.max(a, T * .8), T * .99); if (Q > 0) a = Math.min(a, Q * .97); return Math.round(a * 100) / 100;
+}
+['quoted', 'target', 'ceiling', 'currency'].forEach(i => $('#' + i).addEventListener('input', () => {
+  const Q = +$('#quoted').value || 0, T = +$('#target').value || 0, C = +$('#ceiling').value || 0, cur = $('#currency').value;
+  const h = $('#anchorHint');
+  if (!T) { h.textContent = ''; return; }
+  if (C && C < T) { h.style.color = 'var(--bad)'; h.textContent = 'Ceiling must be at or above target.'; return; }
+  h.style.color = ''; h.textContent = `Bot will open near ${fmt(cur, anchor(Q, T))}.`;
+}));
+
+let chart;
+$('#fcBtn').onclick = async () => {
+  const Q = +$('#quoted').value, T = +$('#target').value, C = +$('#ceiling').value, out = $('#fcOut');
+  if (!Q || !T || !C) { out.textContent = 'Enter quoted rate, target and ceiling first.'; return; }
+  out.textContent = 'Simulating…';
+  try {
+    const r = await api('/api/forecast', { quoted: Q, target: T, ceiling: C, buyer_strategy: $('#strategy').value, supplier_floor: +$('#floor').value || null, rounds: +$('#max_rounds').value || 10 });
+    const s = r.simulation, z = r.zopa, cur = $('#currency').value;
+    out.innerHTML = (s.agreed ? `Likely deal at <b>${fmt(cur, s.price)}</b> (${s.savings_vs_quote_pct}% below quote) in ${s.rounds_used} steps. ` : 'No deal in simulation — raise the ceiling or lower the floor estimate. ')
+      + (z.zopa_exists ? 'Quote is within your ceiling.' : `Quote is ${fmt(cur, z.gap_to_ceiling)} above your ceiling.`) + ` Suggested counter: <b>${fmt(cur, z.suggested_counter)}</b>.`;
+    if (typeof Chart === 'undefined') return;   // chart library blocked/offline: text forecast still shown
+    const cv = $('#fcChart'); cv.classList.remove('hidden'); chart && chart.destroy();
+    const n = r.curves.linear.length, col = { boulware: '#0e8f7e', linear: '#e0a100', conceder: '#c2410c' };
+    chart = new Chart(cv, { type: 'line', data: { labels: [...Array(n).keys()].map(i => 'R' + (i + 1)), datasets: Object.entries(r.curves).map(([k, v]) => ({ label: k, data: v, borderColor: col[k], backgroundColor: col[k], tension: .2, borderWidth: k === $('#strategy').value ? 3 : 1.5, pointRadius: 2 })) }, options: { plugins: { title: { display: true, text: 'Your offer by round, per strategy' } } } });
+  } catch (e) { out.textContent = e.message; }
+};
+
+$('#form').onsubmit = async e => {
+  e.preventDefault();
+  const g = i => $('#' + i).value;
+  const b = {
+    item: g('item'), category: g('category'), quantity: +g('quantity') || 1, unit: g('unit'), needed_by: g('needed_by'),
+    supplier_name: g('supplier_name'), contact: g('contact'), phone: g('phone'), email: g('email'),
+    currency: g('currency'), quoted: +g('quoted') || 0, target: +g('target'), ceiling: +g('ceiling'),
+    terms: [...sel.terms], tone: g('tone'), tactics: [...sel.tactics], instructions: g('instructions'), market_notes: g('market_notes'),
+    engine: g('engine'), strategy: g('strategy'), pacing: g('pacing'), hours: +g('hours') || 48, max_rounds: +g('max_rounds') || 10,
+  };
+  try {
+    const r = await api('/api/negotiations', b);
+    const l = loadMy(); l.unshift({ id: r.id, token: r.buyer_token, item: b.item, supplier: b.supplier_name }); saveMy(l);
+    const link = location.origin + r.link;
+    const box = $('#created'); box.classList.remove('hidden');
+    box.innerHTML = `<h2>Link ready</h2><div class="linkbox"><input readonly value="${esc(link)}"><button class="btn" id="cp">Copy</button></div>
+      <div class="row" style="margin-top:10px"><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${esc(b.phone.replace(/\D/g, ''))}?text=${encodeURIComponent('Please negotiate here: ' + link)}">Send on WhatsApp</a>
+      <button class="btn primary" id="open">Open live desk</button></div><p class="hint">Keep this browser: your buyer access is stored here. Use “Back up” in My deals to save it.</p>`;
+    $('#cp').onclick = () => navigator.clipboard.writeText(link).then(() => toast('Copied'));
+    $('#open').onclick = () => openDesk(r.id);
+    box.scrollIntoView({ behavior: 'smooth' });
+  } catch (err) { toast(err.message); }
+};
+
+/* ---- deals list ---- */
+async function renderDeals() {
+  const my = loadMy(), el = $('#dealList');
+  if (!my.length) { el.innerHTML = '<div class="card hint">No deals yet.</div>'; return; }
+  let items = [];
+  try { items = (await api('/api/batch', { items: my.map(x => ({ id: x.id, token: x.token })) })).items; } catch (e) { toast(e.message); }
+  el.innerHTML = items.map(d => `<div class="card deal" data-id="${esc(d.id)}"><div><b>${esc(d.item)}</b> · ${esc(d.supplier)}
+    <div class="hint">Round ${d.round} · supplier ${fmt(d.currency, d.last_sup)} · our offer ${fmt(d.currency, d.last_bot)}</div></div>
+    <span class="pill ${esc(d.status)}">${esc(d.status)}</span></div>`).join('') || '<div class="card hint">Deals not found on this server.</div>';
+  el.onclick = e => { const c = e.target.closest('.deal'); if (c) openDesk(c.dataset.id); };
+}
+$('#exportBtn').onclick = () => {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(loadMy())], { type: 'application/json' })); a.download = 'parley-backup.json'; a.click();
+};
+$('#importFile').onchange = async e => {
+  try { const inc = JSON.parse(await e.target.files[0].text()); const cur = loadMy(); const ids = new Set(cur.map(x => x.id));
+    saveMy(cur.concat(inc.filter(x => x.id && x.token && !ids.has(x.id)))); renderDeals(); toast('Restored'); } catch { toast('Invalid backup file'); }
+};
+
+/* ---- live desk ---- */
+let cur, poll, last;
+async function openDesk(id) {
+  cur = loadMy().find(x => x.id === id); if (!cur) return toast('No access token for this deal in this browser');
+  show('desk'); $('#v-desk').classList.remove('hidden'); await refresh(); poll = setInterval(refresh, 3000);
+}
+async function refresh() {
+  try {
+    last = await api(`/api/negotiations/${cur.id}?role=buyer&token=${encodeURIComponent(cur.token)}`);
+  } catch (e) { return toast(e.message); }
+  const d = last, b = d.brief, link = location.origin + '/n/' + d.id;
+  $('#dTitle').textContent = `${b.item} · ${b.supplier_name}`;
+  $('#dStatus').textContent = d.status; $('#dStatus').className = 'pill ' + d.status;
+  $('#dMeta').textContent = d.status === 'open' ? 'Expires ' + new Date(d.expires_at * 1000).toLocaleString() : '';
+  const sup = [...d.messages].reverse().find(m => m.role === 'sup' && m.price), bot = [...d.messages].reverse().find(m => m.role === 'bot' && m.price);
+  $('#dKpis').innerHTML = [['Round', d.round + ' / ' + b.max_rounds], ['Supplier', fmt(b.currency, sup?.price ?? b.quoted)], ['Our offer', fmt(b.currency, bot?.price)], ['Target', fmt(b.currency, b.target)], ['Ceiling', fmt(b.currency, b.ceiling)], ['AI', d.ai_provider || 'rules']]
+    .map(([k, v]) => `<div class="kpi"><b>${esc(v)}</b><span>${k}</span></div>`).join('');
+  $('#dLink').value = link; renderChat($('#dChat'), d.messages, 'buyer');
+  if (!$('#c_price').value && bot?.price) $('#c_price').placeholder = bot.price;
+}
+$('#copyBtn').onclick = () => navigator.clipboard.writeText($('#dLink').value).then(() => toast('Copied'));
+$('#waBtn').onclick = () => window.open('https://wa.me/' + (last.brief.phone || '').replace(/\D/g, '') + '?text=' + encodeURIComponent('Please negotiate here: ' + $('#dLink').value), '_blank', 'noopener');
+$('#backBtn').onclick = () => show('deals');
+$('#dSend').onclick = async () => {
+  const t = $('#dInput').value.trim(); if (!t) return;
+  try { await api(`/api/negotiations/${cur.id}/message`, { kind: $('#dMode').value, text: t, token: cur.token }); $('#dInput').value = ''; toast($('#dMode').value === 'buyer_whisper' ? 'Whispered — used on the next reply' : 'Sent'); refresh(); } catch (e) { toast(e.message); }
+};
+$('#dInput').onkeydown = e => { if (e.key === 'Enter') $('#dSend').click(); };
+$('#extendBtn').onclick = async () => { try { await api(`/api/negotiations/${cur.id}/extend`, { hours: 24, token: cur.token }); toast('Extended 24 h'); refresh(); } catch (e) { toast(e.message); } };
+$('#concludeBtn').onclick = async () => {
+  const p = +$('#c_price').value; if (!p) return toast('Enter the agreed rate');
+  try { await api(`/api/negotiations/${cur.id}/conclude`, { token: cur.token, agreed_price: p, price_validity: $('#c_validity').value, delivery: $('#c_delivery').value, payment_terms: $('#c_payment').value, packing: $('#c_packing').value, freight: $('#c_freight').value, quality: $('#c_quality').value }); toast('Concluded'); refresh(); } catch (e) { toast(e.message); }
+};
+$('#pdfBtn').onclick = () => {
+  const { jsPDF } = window.jspdf; const doc = new jsPDF(), b = last.brief, o = last.outcome || {}; let y = 16;
+  const line = (t, s = 11) => { doc.setFontSize(s); doc.splitTextToSize(String(t), 180).forEach(l => { if (y > 280) { doc.addPage(); y = 16; } doc.text(l, 14, y); y += s * .5 + 2; }); };
+  line('Parley — Negotiation report', 18); line(`${b.item} · ${b.supplier_name}`, 13);
+  line(`Status: ${last.status}`); line(`Quoted: ${b.currency} ${b.quoted || '—'}   Target: ${b.target}   Ceiling: ${b.ceiling}`);
+  if (o.agreed_price) { line(`Agreed rate: ${b.currency} ${o.agreed_price}${o.savings_pct != null ? `  (${o.savings_pct}% below quote)` : ''}`, 13);
+    ['price_validity', 'delivery', 'payment_terms', 'packing', 'freight', 'quality'].forEach(k => o[k] && line(`${k.replace('_', ' ')}: ${o[k]}`)); }
+  y += 4; line('Transcript', 13);
+  last.messages.filter(m => m.role !== 'whisper').forEach(m => line(`[${m.role}] ${m.text}`, 10));
+  doc.save(`parley-${last.id}.pdf`);
+};
+</script>
+</body>
+</html>
